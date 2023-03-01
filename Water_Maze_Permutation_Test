@@ -1,0 +1,87 @@
+## June 9, 2021
+## Bianca Ludeker
+## Analyzing the water maze data in four ways
+
+#### Packages ####
+library(compositions)  ##analysis of compoistional data from book
+library(progress)      ##MCreates progress bars for looped functions.
+library(xtable)        ## exports tables and matrices in latex format.
+
+
+#### Reading in Data/ Preliminary An=alysis ####
+
+water.maze.data <- read.csv("water_maze_data.csv")
+View(water.maze.data)
+
+tg.data <- as.matrix(water.maze.data[1:7, 2:5])
+wild.data <- as.matrix(water.maze.data[8:14, 2:5])
+
+sirt::dirichlet.mle(tg.data)
+sirt::dirichlet.mle(wild.data)
+
+## All correlations are negative for the TG group.
+cor(tg.data)
+
+
+## The correlation between OQ and AQ1 is positive!  This is evidence a Dirichlet
+## is not the correct model for the wild rodents.
+cor(wild.data)
+
+
+## If the data set is combined into one set, then the positive correlation persists
+## between AQ1 and OQ.  This should be in the same nested part of a tree.
+full.data <- as.matrix(water.maze.data[, 2:5])
+cor(full.data)
+
+
+## Problem:  In one group, OQ and AQ1 are negatively correlated and in the other
+## group they are positively correlated.  How can we mitigate this in the nesting structure?
+
+#### Aitchison's Distance and Permutation Test ####
+clr.full.data <- compositions::clr(full.data)
+
+## Function for computing the test statistic.  Impute the two group data sets
+## that have already been clr transformed.
+ait.test.stat <- function(group.one, group.two){
+  test.stat <- 0
+  for (h in 1:7){
+    for (i in 1:7){
+      aa <- (sum((group.one[h,] - group.two[i,])^2))^0.5
+      test.stat <- test.stat + aa
+    }
+  }
+  return(test.stat)
+}
+
+## Test statistic for actual data.
+
+observed.stat <- ait.test.stat(clr.full.data[1:7,], clr.full.data[8:14,])
+
+## Create the distribution of the test statistic using all 3432 permutations.
+
+all.ait.test.stats <- function() {
+  index.g1 <- t(combn(1:14, 7))
+  all.test.stats <- NULL
+  pb <- progress_bar$new(total = 3432)
+  for(i in 1:3432){
+    aa <- index.g1[i,]
+    group.one <- clr.full.data[aa,]
+    group.two <- clr.full.data[-aa,]
+    all.test.stats <- c(all.test.stats, ait.test.stat(group.one, group.two))
+    pb$tick()
+    Sys.sleep(1 / 3432)
+  }
+  return(all.test.stats)
+}
+
+all.ait <- all.ait.test.stats()
+
+hist(all.ait, main = "All Possible Values of the AIT Statistic", xlab="AIT Distance")
+abline(v=observed.stat, col="dark red", lwd=4)
+text(x=observed.stat, y= 600, "Observed")
+
+## This gives a p-value of 0.170
+sum(all.ait >= observed.stat)/3432
+  
+  
+
